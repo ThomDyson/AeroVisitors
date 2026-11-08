@@ -13,6 +13,14 @@ This card can use either a direct feed from an ADSB source, or a Home Assistant 
    A320.png, B738.png, C172.png
  
 
+
+## Config Notes
+If you configure a Home Assistant weather entity, the background will updated based on conditions. If you configure a Sun sensor, the background will update based on that. The weather sensor is not used to show cloud levels. METAR will provide cloud level information. Most airports have a 4 character METAR code. METAR data is generously provided by Datamask Aviation. [Datamask] ( https://datamask.org/ )  Don't remove their attribution if you use their data.
+You can use our own ADSB receiver or a public data source like adsb.lol 
+Route data source is configurable, but the parser expects the data to be in the format provided by ADSB.im
+
+The weather (METAR) view gets a messy quickly if there are too many aircraft close together. Work in progress.
+
 ## ADSB Sensor Config
 ```
   - resource: https://api.adsb.lol/v2/lat/40/lon/-70/dist/100
@@ -34,8 +42,6 @@ recorder:
     entity_globs:
       - sensor.adsb_*
 ```
-## Config Notes
-If you configure a Home Assistant weather entity, the background will updated based on conditions. If you configure a Sun sensor, the background will update based on that. The weather sensor is not used to show cloud levels. METAR will provide cloud level information. Most airports have a 4 character METAR code. METAR data is generously provided by Datamask Aviation. [Datamask] ( https://datamask.org/ )  Don't remove their attribution if you use their data.
 
 ## Aircraft Images
 I generated the included images with openAi. The required python file is included so you can adapt it as needed. I have looked at many of the images and used another AI to validate them, but you know how AI is. It will invent things. If there is anything laughably wrong, let me know.
@@ -49,3 +55,6 @@ The Weather view shows all aircraft in a vertical stack, with data from a METAR 
    ![av cluster](av-cluster-view.png)
     ![av stacked](av-stacked-view.png)
  ![av weather](av-weather-view.png)
+
+ ## Acknowledgments
+ This project was inspired by the amazing work of Ted Warner and his [Avian Visitors] ( https://github.com/Twarner491/AvianVisitors ) project. And by Tesserae's incredible  e-ink panel solution [Tesserae ( https://tesserae.ink/ ).  I did all the design work. AI did all the heavy lifting and much of code typing. 
