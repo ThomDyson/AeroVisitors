@@ -44,6 +44,7 @@ recorder:
 ```
 
 ## Aircraft Images
+Aircraft images are based on the aircraft type code. If no image is available or a type code is not available, a generic shape is used. 
 I generated the included images with openAi. The required python file is included so you can adapt it as needed. I have looked at many of the images and used another AI to validate them, but you know how AI is. It will invent things. If there is anything laughably wrong, let me know.
 
 ## Views
@@ -57,4 +58,4 @@ The Weather view shows all aircraft in a vertical stack, with data from a METAR 
  ![av weather](av-weather-view.png)
 
  ## Acknowledgments
- This project was inspired by the amazing work of Ted Warner and his [Avian Visitors] ( https://github.com/Twarner491/AvianVisitors ) project. And by Tesserae's incredible  e-ink panel solution [Tesserae ( https://tesserae.ink/ ).  I did all the design work. AI did all the heavy lifting and much of code typing. 
+ This project was inspired by the amazing work of Ted Warner and his Avian Visitors ( https://github.com/Twarner491/AvianVisitors ) project. And by Tesserae's incredible  e-ink panel solution Tesserae ( https://tesserae.ink/ ).  I did all the design work. AI did all the heavy lifting and much of code typing. 
