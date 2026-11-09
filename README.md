@@ -1,7 +1,7 @@
 # AeroVisitors
  Home Assistant card to show images of aircraft based on ADSB data.
 
-This card can use either a direct feed from an ADSB source, or a Home Assistant sensor that pulls data from a feed. Many remote feeds won't allow a web page to pull them in, based on CORS configuration, so this handles that by having the Home Assistant sensor read the data.  A rest.yaml configuration file might look like this
+This card can use either a direct feed from an ADSB source, or a Home Assistant sensor that pulls data from a feed. Many remote feeds won't allow a web page to pull them in, based on CORS configuration, so this handles that by having the Home Assistant sensor read the data.  A rest.yaml configuration file example is shown below.
 
 ## Installation
  1. Copy the card to /config/www/aero-visitors-card.js
@@ -50,7 +50,7 @@ I generated the included images with openAi. The required python file is include
 ## Views
 The Plate view shows one aircraft.
 The Cluster view shows all aircraft in a group. They can be scaled to show size differences or all plans can be shown the same size.
-The Stacked view shows all aircaft in a vertical stack, sorted by altitude
+The Stacked view shows all aircraft in a vertical stack, sorted by altitude
 The Weather view shows all aircraft in a vertical stack, with data from a METAR weather source showing cloud levels. This shows on one screen and will cause planes and descriptions to overlap if there are many aircraft.  METAR data should come from your nearest airport.
   ![av Plate](av-plate-view.png)
    ![av cluster](av-cluster-view.png)
