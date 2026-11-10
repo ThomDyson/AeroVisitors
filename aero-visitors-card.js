@@ -1,19 +1,19 @@
 /*
- * AeroVisitors  -  Home Assistant Lovelace card
+ * AeroVisitors — Home Assistant Lovelace card
  *
- * Displays aircraft data from a local ADS-B receiver or Home Assistant sensor.
+ * Aircraft overhead from a local ADS-B receiver or Home Assistant sensor.
  *
  * Views:
- *   plate    -  one selected aircraft
- *   cluster  -  aircraft packed according to relative wingspan
- *   stacked  -  single column sorted by altitude
- *   weather    -  aircraft and cloud layers positioned by altitude, based on METAR data
+ *   plate   — one selected aircraft
+ *   cluster — aircraft packed according to relative wingspan
+ *   stacked — single column sorted by altitude
+ *   metar   — aircraft and cloud layers positioned by altitude
  *
  * Install:
  *   1. Copy to /config/www/aero-visitors-card.js
- *   2. Add /local/aero-visitors-card.js as a JavaScript module resource on the  Dashboards screen. Three dot menu in the upper right corner. 
+ *   2. Add /local/aero-visitors-card.js as a JavaScript module resource
  *   3. Put aircraft images in /config/www/aircraft/
- *   4. aircraft should be 1500x100 roughly.  PNG with transparent background is best
+ *  4. aircraft shold be 1500x100 roughly.  PNG with transparent background is best
  *
  * Images are named by ICAO aircraft type:
  *   A320.png, B738.png, C172.png
@@ -33,9 +33,12 @@
  * The sensor must expose an aircraft or ac array in its attributes.
  * Example configuration:
  * Install the RESTful integration
- * create a yaml file with this and add it to the configuration.yaml
+ * add this to your configuration.yaml file
+ *  rest: !include adsb_rest.yaml
+ * create a adsb_rest.yaml file with this 
+ * REPLACE 40 and -70 with your lat and lon, REPLACE 100 with the radius you want 
  * - resource: https://api.adsb.lol/v2/lat/40/lon/-70/dist/100
- *  scan_interval: 600
+ *   scan_interval: 600
  *   timeout: 5
  *   sensor:
  *     - name: ADSB Feed LOL
@@ -46,11 +49,9 @@
  *         - ac
  *         - msg
  *
- * The automatic background requires a Home Assistant weather entity.
- * METAR data on the weather view is based on configuring a METAR station code.
   
     */
-const AEROVISITORS_CARD_VERSION = '1.0.0';
+const AEROVISITORS_CARD_VERSION = '1.1.0';
 const VIEWS = ['plate', 'cluster', 'stacked', 'metar'];
 
 //required under Datamask TOS
@@ -171,7 +172,9 @@ const DEFAULTS = {
   show_clouds_stacked: false,
 
   cluster_scale: 0.92,
+  cluster_text_size: 16,
   stack_scale: 0.92,
+  stack_text_size: 16,  
   size_curve: 0.5,
   plate_pick: 'nearest',
 
@@ -235,10 +238,8 @@ function fallbackSvg() {
 const CSS = `
 /* Card shell */
 :host { display: block; width: 100%; height: var(--ov-panel-height, calc(100dvh - 80px)); min-height: 0; box-sizing: border-box; }
-ha-card { display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; box-sizing: border-box; overflow: hidden; 
-		background: var(--ha-card-background, var(--card-background-color, #222)); }
-.stage { --aircraft-text-color: #fff; --aircraft-text-shadow: 0 1px 3px rgba(0,0,0,.6); position: relative; flex: 1 1 0; min-height: 0;
-		min-width: 0; width: 100%; overflow: hidden; color: var(--aircraft-text-color); font-family: var(--paper-font-body1_-_font-family, inherit); }
+ha-card { display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; box-sizing: border-box; overflow: hidden; background: var(--ha-card-background, var(--card-background-color, #222)); }
+.stage { --aircraft-text-color: #fff; --aircraft-text-shadow: 0 1px 3px rgba(0,0,0,.6); position: relative; flex: 1 1 0; min-height: 0; min-width: 0; width: 100%; overflow: hidden; color: var(--aircraft-text-color); font-family: var(--paper-font-body1_-_font-family, inherit); }
 .stage > .bd { position: absolute; inset: 0; width: 100%; height: 100%; box-sizing: border-box; pointer-events: none; }
 .content { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; box-sizing: border-box; }
 .stage:is([data-view=stacked],[data-view=metar]) .content { overflow-y: auto; overflow-x: hidden; overscroll-behavior-y: contain; }
@@ -300,19 +301,22 @@ ha-card { display: flex; flex-direction: column; width: 100%; height: 100%; min-
 /* Cluster layout */
 .stage[data-view=cluster] .aircraft { position: absolute; left: 0; top: 0; display: flex; flex-direction: column; transition: transform .6s ease,width .6s ease,height .6s ease; }
 .stage[data-view=cluster] .aircraft-art { flex: 1; min-height: 0; align-self: center; }
-.stage[data-view=cluster] .aircraft-subtitle { height: 46px; }
+.stage[data-view=cluster] .aircraft-title { font-size: var(--cluster-title-font-size, 16px); }
+.stage[data-view=cluster] .aircraft-subtitle { font-size: var(--cluster-subtitle-font-size, 14px); height: var(--cluster-subtitle-height, 46px); }
 .stage[data-view=cluster] .content.cluster-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(150px,100%),1fr)); align-content: start; gap: 12px; padding: 8px; overflow-y: auto; overflow-x: hidden; overscroll-behavior-y: contain; }
 .stage[data-view=cluster] .cluster-grid .aircraft { position: relative; left: auto; top: auto; width: auto !important; height: auto !important; transform: none !important; transition: none; }
 .stage[data-view=cluster] .cluster-grid .aircraft-art { flex: none; width: 100% !important; height: 100px; max-height: 100px; }
 .stage[data-view=cluster] .cluster-grid :is(.aircraft-title,.aircraft-subtitle) { height: auto; overflow-wrap: anywhere; }
 
 /* Stacked layout */
-.stack-list { display: flex; flex-direction: column; align-items: stretch; gap: 10px;  padding: 4px 0px 0px; height: auto; box-sizing: border-box; min-height: 100%; }
+.stack-list { display: flex; flex-direction: column; align-items: stretch; gap: 2px;  padding: 4px 0px 0px; height: auto; box-sizing: border-box; min-height: 100%; }
 .stage[data-view=stacked] .aircraft { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 2px; border-bottom: none; }
 .stage[data-view=stacked] .aircraft:last-child { border-bottom: none; }
 .stage[data-view=stacked] .aircraft-art { flex: none; max-width: 90%; max-height: 320px; height: 100px; }
 .stage[data-view=stacked] img.aircraft-art { filter: drop-shadow(0 2px 4px rgba(0,0,0,.22)); }
-.stage[data-view=stacked] .aircraft-subtitle { white-space: nowrap; }
+.stage[data-view=stacked] .aircraft-title {font-size: var(--stack-title-font-size, 16px); }
+.stage[data-view=stacked] .aircraft-subtitle { font-size: var(--stack-subtitle-font-size, 14px); white-space: nowrap; }
+
 
 /* Shared cloud components */
 .cloud-layer { box-sizing: border-box; color: var(--aircraft-text-color); text-shadow: var(--aircraft-text-shadow); }
@@ -358,7 +362,7 @@ ha-card { display: flex; flex-direction: column; width: 100%; height: 100%; min-
 .ground-weather.dust {  background: linear-gradient( to top, rgba(185,155,105,.45), rgba(185,155,105,.15), transparent  ); }
 .ground-weather.storm {  background: linear-gradient( to top, rgba(50,55,70,.35), rgba(50,55,70,.15), transparent  ); }
 
-/* Lightning overlay  -  positioned vertically by the rendering code. */
+/* Lightning overlay — positioned vertically by the rendering code. */
 .ground-weather.metar-lightning {  position: absolute;  left: 0;  right: 0;  z-index: 10;  pointer-events: none;  opacity: 0;  background: linear-gradient(    135deg,    rgba(220, 230, 255, 0.65),    rgba(245, 248, 255, 0.25)  ); }
 /* Both classes are applied to the lightning layer itself. */
 .ground-weather.metar-lightning.has-thunder {  animation: metar-lightning-flash 5s linear infinite; }
@@ -403,7 +407,7 @@ ha-card { display: flex; flex-direction: column; width: 100%; height: 100%; min-
 .clock-time, .clock-date { font-size: 24px; font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; }
 
 @media (prefers-reduced-motion:reduce) {
-  .slider .seg-pill, .slider button, .aircraft-art, .stage[data-view=cluster] .aircraft { transition: none; }
+  .slider .seg-pill, .slider button, .aircraft-art, .stage[data-view=cluster] .aircraft { transition: none; } .ground-weather,  .ground-weather::before,  .ground-weather::after {    animation: none !important;  }
 }
 `;
 
@@ -510,6 +514,30 @@ class AeroVisitorsCard extends HTMLElement {
       );
     }
 
+    if (
+      !Number.isFinite(updatedConfig.radius) ||
+      updatedConfig.radius < 1 ||
+      updatedConfig.radius > 1000
+    ) {
+      throw new Error( 'Radius must be a number between 1 and 1000 (mi/km, follows selected units).' );
+    }
+
+    if (
+      !Number.isFinite(updatedConfig.cluster_text_size) ||
+      updatedConfig.cluster_text_size < 8 ||
+      updatedConfig.cluster_text_size > 48
+    ) {
+      throw new Error( 'Cluster View font size must be a number between 8 and 48 pixels.' );
+    }
+
+    if (
+      !Number.isFinite(updatedConfig.stack_text_size) ||
+      updatedConfig.stack_text_size < 8 ||
+      updatedConfig.stack_text_size > 48
+    ) {
+      throw new Error('Stacked view font size must be a number between 8 and 48 pixels.' );
+    }
+
     updatedConfig.view = VIEWS.includes(updatedConfig.view) ? updatedConfig.view : 'cluster';
     // Weather view is unavailable when METAR is disabled.
     if (!updatedConfig.metar_enabled && updatedConfig.view === 'metar') {
@@ -526,22 +554,19 @@ class AeroVisitorsCard extends HTMLElement {
     }
 
     updatedConfig.metar_airport_elevation_ft = airportElevation;
+    
+    if (updatedConfig.show_clouds_stacked && !updatedConfig.metar_enabled) {
+      throw new Error('METAR data must be enabled to show clouds.')
+    }
 
     if (updatedConfig.metar_enabled) {
       if (!/^[A-Z]{4}$/.test(updatedConfig.metar_airport)) {
         throw new Error('METAR: Airport ICAO code must be exactly 4 letters');
       }
-
-    if (updatedConfig.show_clouds_stacked && !updatedConfig.metar_enabled) {
-      throw new Error('METAR data must be enabled to show clouds.')
-    }  
-
       const refresh = Number(updatedConfig.metar_refresh);
-
       if (!Number.isInteger(refresh) || refresh < 30 || refresh > 1440) {
         throw new Error('METAR: Refresh interval must be an integer between 30 and 1440 minutes');
       }
-
       updatedConfig.metar_refresh = refresh;
     }
 
@@ -839,13 +864,16 @@ class AeroVisitorsCard extends HTMLElement {
 
       if (!isCurrent()) return;
 
-      if (!data || typeof data.decoded !== 'object' || !data.decoded) {
-        throw new Error('METAR response is missing decoded weather data');
+      if (data?.error) {
+        throw new Error(
+          data.message || 'Unable to retrieve METAR data.'
+        );
       }
 
-      if (data.error) {
-        window.alert(data.message || 'Unable to retrieve METAR data.');
-        return;
+      if ( !data || !data.decoded || typeof data.decoded !== 'object' ) {
+        throw new Error(
+          'METAR response is missing decoded weather data'
+        );
       }
 
       this._metarData = data;
@@ -1048,6 +1076,7 @@ class AeroVisitorsCard extends HTMLElement {
       return;
     }
 
+    this._pruneRouteCache();
     const poll = {};
     const generation = this._generation;
     const c = this._cfg;
@@ -1285,11 +1314,6 @@ class AeroVisitorsCard extends HTMLElement {
         });
 
         image.onerror = (event) => {
-          console.warn('[Aircraft image] Failed to load', {
-            url,
-            event,
-          });
-
           finish(null);
         };
         image.src = url;
@@ -1316,58 +1340,31 @@ class AeroVisitorsCard extends HTMLElement {
     const tryName = (name) =>
       this._probeImg(imageUrl(name));
 
-    // Suppress repeated warnings during refreshes.
-    this._missingAircraftImages ??= new Set();
-
     if (a.t) {
       const url = imageUrl(a.t);
       const hit = await tryName(a.t);
 
       if (hit) {
-        this._missingAircraftImages.delete(url);
         return hit;
       }
-      warnOnce(
-        url,
-        `[AeroVisitors] Image unavailable for aircraft type "${a.t}"`,
-        {
-          type: a.t,
-          hex: a.hex,
-          flight: a.flight,
-          expectedUrl: url,
-          fallback: config.image_fallback || 'SVG silhouette',
-        }
-      );
-    } else {
-      warnOnce(
-        `no-type:${a.hex}`,
-        '[AeroVisitors] No aircraft type supplied; using generic image',
-        {
-          hex: a.hex,
-          flight: a.flight,
-          registration: a.r,
-        }
-      );
     }
-
     if (!config.image_fallback) return null;
-
     const fallback = await tryName(config.image_fallback);
-
-    if (!fallback) {
-      const url = imageUrl(config.image_fallback);
-
-      warnOnce(
-        `fallback:${url}`,
-        '[AeroVisitors] Fallback image unavailable; using SVG silhouette',
-        { expectedUrl: url }
-      );
-    }
-
     return fallback;
   }
 
   // ---------- Routes ----------
+
+    // clear any route cache older than 30 minutes to avoid memory bloat
+    _pruneRouteCache() {
+    const cutoff = Date.now() - 30 * 60 * 1000;
+
+    for (const [url, entry] of this._routes) {
+      if (entry.t <= cutoff) {
+        this._routes.delete(url);
+      }
+    }
+  }
 
   async _getRoute(a, config = this._cfg, signal = this._lifecycleCtl?.signal) {
     if (signal?.aborted || !config.route_lookup || !/^[A-Z]{3}\d/.test(a.flight)) {
@@ -1423,7 +1420,6 @@ class AeroVisitorsCard extends HTMLElement {
       }
 
       if (signal?.aborted) return null;
-
       this._routes.set(url, { t: Date.now(), val: value });
       return value;
     })();
@@ -1674,9 +1670,9 @@ class AeroVisitorsCard extends HTMLElement {
 
   _alertText(a) {
     const squawkLabels = {
-      '7500': 'Unlawful interference  -  7500',
-      '7600': 'Radio failure  -  7600',
-      '7700': 'General emergency  -  7700',
+      '7500': 'Unlawful interference — 7500',
+      '7600': 'Radio failure — 7600',
+      '7700': 'General emergency — 7700',
     };
 
     const statusLabels = {
@@ -2078,6 +2074,11 @@ _metarGroundWeather() {
     const container = this._aircraftContainer;
     if (!container) return;
 
+    const textSize = this._cfg.stack_text_size;
+
+    container.style.setProperty( '--stack-title-font-size', `${textSize}px`  );
+    container.style.setProperty( '--stack-subtitle-font-size', `${textSize * (14 / 16)}px`  );  //16 is the default title size
+
     const keep = new Set(this._targets.map((a) => a.hex));
     this._pruneAircraftItems(keep);
 
@@ -2085,9 +2086,6 @@ _metarGroundWeather() {
     for (const cloudRow of container.querySelectorAll('.cloud-layer')) {
       cloudRow.remove();
     }
-
-    const configuredScale = Number(this._cfg.stack_scale);
-    const scale = Number.isFinite(configuredScale) ? configuredScale : DEFAULTS.stack_scale;
 
     const entries = this._targets.map((aircraft) => ({
       kind: 'aircraft',
@@ -2132,16 +2130,10 @@ _metarGroundWeather() {
         container.appendChild(this._renderCloudLayer(entry.layer));
         continue;
       }
-
       const aircraft = entry.aircraft;
       const item = this._getAircraftItem(aircraft);
-      const relativeSize = Math.pow(this._getWingSpan(aircraft), this._sizeCurve());
-      const widthPercent = Math.max(12, Math.min(90, relativeSize * scale));
-
-      item.art.style.width = `${widthPercent}%`;
-      item.art.style.minWidth = '42px';
-
       container.appendChild(item.el);
+     
     }
 
     // Show attribution after the content and at the bottom of a short list. If needed
@@ -2156,6 +2148,167 @@ _metarGroundWeather() {
       container.appendChild(footer);
     } else {
       footer?.remove();
+    }
+    this._sizeStackedAircraft();
+  }
+
+  _sizeStackedAircraft() {
+    const container = this._aircraftContainer;
+
+    if (
+      this._renderedView !== 'stacked' ||
+      !container ||
+      !this._targets.length
+    ) {
+      return;
+    }
+
+    const width = this._content.clientWidth;
+    const height = this._content.clientHeight;
+
+    if (width <= 0 || height <= 0) return;
+
+    const px = (value) => parseFloat(value) || 0;
+
+    const containerStyle = getComputedStyle(container);
+    const rowGap = px(containerStyle.rowGap);
+
+    const containerPaddingX =  px(containerStyle.paddingLeft) + px(containerStyle.paddingRight);
+    const containerPaddingY =  px(containerStyle.paddingTop) +  px(containerStyle.paddingBottom);
+
+    // Reserve space for attribution when it is displayed.
+    const footer = container.querySelector('.stack-metar-footer');
+
+    const footerSpace = footer
+      ? footer.offsetHeight + rowGap
+      : 0;
+
+    const availableHeight = Math.max(
+      1,
+      height - containerPaddingY - footerSpace
+    );
+    const visibleRows = Math.min(4, this._targets.length);
+    const targetRowHeight = Math.max(
+      1,
+      (
+        availableHeight -
+        rowGap * (visibleRows - 1)
+      ) / visibleRows
+    );
+
+    const configuredScale = Number(this._cfg.stack_scale);
+
+    const scale = Number.isFinite(configuredScale)
+      ? Math.min(1, Math.max(0.2, configuredScale))
+      : DEFAULTS.stack_scale;
+
+    const sizeCurve = this._sizeCurve();
+
+    // Normalize wingspan sizing against the largest visible target.
+    const largestSize = Math.max(
+      ...this._targets.map((aircraft) =>
+        Math.pow(this._getWingSpan(aircraft), sizeCurve)
+      )
+    );
+
+    const rows = [];
+
+    for (const aircraft of this._targets) {
+      const item = this._items.get(aircraft.hex);
+      if (!item) continue;
+
+      const itemStyle = getComputedStyle(item.el);
+
+      const paddingX = px(itemStyle.paddingLeft) +  px(itemStyle.paddingRight);
+
+      const paddingY = px(itemStyle.paddingTop) +   px(itemStyle.paddingBottom);
+
+      const borderX =  px(itemStyle.borderLeftWidth) + px(itemStyle.borderRightWidth);
+
+      const borderY =  px(itemStyle.borderTopWidth) + px(itemStyle.borderBottomWidth);
+
+      // Three children: artwork, title, subtitle.
+      const internalGaps = px(itemStyle.rowGap) * 2;
+
+      const captionHeight =
+        item.titleEl.offsetHeight +
+        item.subtitleEl.offsetHeight;
+
+      const overhead =
+        paddingY +
+        borderY +
+        internalGaps +
+        captionHeight;
+
+      const availableWidth = Math.max(
+        1,
+        width - containerPaddingX - paddingX - borderX
+      );
+
+      const relativeSize =  Math.pow(this._getWingSpan(aircraft), sizeCurve) / largestSize;
+      const baseImageWidth =  availableWidth * 0.9 * relativeSize * scale;
+      const aspect = aircraft.img
+        ? aircraft.img.h / aircraft.img.w
+        : 0.4;
+
+      rows.push({
+        item,
+        overhead,
+        baseImageWidth,
+        baseImageHeight: baseImageWidth * aspect,
+      });
+    }
+
+    if (!rows.length) return;
+
+    /*
+    * Normally use the six-row allowance. If the configured text alone exceeds that allowance,
+    * preserve the text and allow scrolling instead.
+    */
+    const MIN_ART_HEIGHT_PX = 250;
+
+    const rowHeight = Math.max(
+      targetRowHeight,
+      ...rows.map((row) => row.overhead + MIN_ART_HEIGHT_PX)
+    );
+
+    /*
+    * Apply one height-fitting factor to all aircraft.
+    * This preserves relative wingspan proportions even when
+    * height, rather than width, becomes the limiting factor.
+    */
+    let heightScale = 1;
+
+    for (const row of rows) {
+      const artworkHeight = Math.max(
+        1,
+        rowHeight - row.overhead
+      );
+
+      if (row.baseImageHeight > 0) {
+        heightScale = Math.min(
+          heightScale,
+          artworkHeight / row.baseImageHeight
+        );
+      }
+    }
+
+    for (const row of rows) {
+      const artworkHeight = Math.max(
+        1,
+        rowHeight - row.overhead
+      );
+
+      const imageWidth =
+        row.baseImageWidth * heightScale;
+
+      row.item.el.style.height = `auto`;
+      row.item.el.style.flex = '0 0 auto';
+
+      row.item.art.style.width = `${imageWidth}px`;
+      row.item.art.style.minWidth = '0';
+      row.item.art.style.height =  `${row.baseImageHeight * heightScale}px`;;
+      row.item.art.style.maxHeight = `${artworkHeight}px`;
     }
   }
 
@@ -2186,7 +2339,7 @@ _metarGroundWeather() {
       ) {
         return;
       }
-      // Altitude grouping and scale  -  feet.
+      // Altitude grouping and scale — feet.
       const ALTITUDE_BAND_FT = 1000;          // aircraft are grouped into fixed width bands for display
       const MINIMUM_CEILING_AGL_FT = 5000;    // minimum value for the top of the screen
       // Curve strength relative to the final display ceiling.
@@ -2212,7 +2365,7 @@ _metarGroundWeather() {
       const AIRCRAFT_CARD_GAP_PX = 50;
       const CANVAS_EDGE_PADDING_PX = 6;
       const AIRCRAFT_SPACING_PX = MAX_CARD_WIDTH_PX + AIRCRAFT_CARD_GAP_PX;
-      // Clouds and ground weather  -  existing behavior unchanged.
+      // Clouds and ground weather — existing behavior unchanged.
       const MIN_CLOUD_NATURAL_HEIGHT_PX = 52;
       const GROUND_WEATHER_MAX_HEIGHT_AGL_FT = 1000;
 
@@ -2406,12 +2559,22 @@ _metarGroundWeather() {
 
         // Scale artwork and labels relative to the  base height.
         const aircraftScale = aircraftHeight / AIRCRAFT_BASE_HEIGHT_PX;
+        const artHeight = AIRCRAFT_ART_HEIGHT_PX * aircraftScale;
+                // Center the artwork at its altitude, but keep the artwork
+        // inside the scene. Labels may extend below the bottom.
+        const bandTop = Math.max(
+          SCENE_PADDING_PX,
+          Math.min(
+            y - artHeight / 2,
+            sceneHeightPx - SCENE_PADDING_PX - artHeight
+          )
+        );
 
         const band = document.createElement('div');
         band.className = 'metar-band';
         band.dataset.bucket = row.bucket;
         band.dataset.altitude = String(row.altitude);
-        band.style.top = `${y}px`;
+        band.style.top = `${bandTop}px`;
         band.style.height = `${aircraftHeight}px`;
 
         const track = document.createElement('div');
@@ -2452,7 +2615,7 @@ _metarGroundWeather() {
           item.el.style.height = `${aircraftHeight}px`;
           item.el.style.flexShrink = '0';
 
-          item.art.style.width =            `${AIRCRAFT_ART_HEIGHT_PX * aircraftScale}px`;
+          item.art.style.width =           "100%";
           item.art.style.height =           `${AIRCRAFT_ART_HEIGHT_PX * aircraftScale}px`;
           item.titleEl.style.fontSize =     `${AIRCRAFT_FONT_SIZE_PX  * aircraftScale}px`;
           item.titleEl.style.lineHeight =   `${AIRCRAFT_LINE_HEIGHT_PX  * aircraftScale}px`;
@@ -2578,7 +2741,6 @@ _metarGroundWeather() {
  
 
   // ---------- Cluster packing ----------
-
   _layout() {
     if (
       !this._cfg || this._cfg.view !== 'cluster' ||
@@ -2593,42 +2755,129 @@ _metarGroundWeather() {
     if (!width || !height) return;
 
     const items = [...this._items.values()].sort(
-      (a, b) => b.span - a.span || a.ac.hex.localeCompare(b.ac.hex)
+      (a, b) => b.span - a.span ||
+        a.ac.hex.localeCompare(b.ac.hex)
     );
 
-    const captionHeight = 70;
-    const padding = 6;
-    let minWidth = 150;
+    const baseFontSize = this._cfg.cluster_text_size;
+    const fontRatio = baseFontSize / 16;
 
-    const gridSpacing = Math.max(6, Math.round(Math.min(width, height) / 40));
+    // At 100% scale, a 30-meter aircraft is 240px wide.
+    const referenceSpan = Math.pow(30, this._sizeCurve());
+    const referenceImageWidth = 240;
+
+    /*
+    * Fonts stay at their base sizes in the DOM.
+    * The final transform scales the entire card, including text.
+    */
+    this._content.style.setProperty(
+      '--cluster-title-font-size',
+      `${baseFontSize}px`
+    );
+
+    this._content.style.setProperty(
+      '--cluster-subtitle-font-size',
+      `${baseFontSize * (14 / 16)}px`
+    );
+
+    this._content.style.setProperty(
+      '--cluster-subtitle-height',
+      'auto'
+    );
+
+    this._content.classList.remove('cluster-grid');
+
+    /*
+    * Disable transitions while measuring.
+    * Otherwise a width transition can produce an intermediate
+    * caption width and an incorrect measurement.
+    */
+    for (const item of items) {
+      item.el.style.transition = 'none';
+      item.el.style.transformOrigin = 'top left';
+    }
+
+    const measureCards = (minimumWidth) => {
+      // Assign all base dimensions before reading measurements.
+      for (const item of items) {
+        item.baseImageWidth =
+          referenceImageWidth * item.span / referenceSpan;
+
+        item.baseImageHeight =
+          item.baseImageWidth * item.aspect;
+
+        item.baseWidth = Math.max(
+          item.baseImageWidth,
+          minimumWidth * fontRatio
+        );
+
+        item.el.style.width = `${item.baseWidth}px`;
+        item.el.style.height = 'auto';
+
+        item.art.style.flex = 'none';
+        item.art.style.width = `${item.baseImageWidth}px`;
+        item.art.style.height = `${item.baseImageHeight}px`;
+
+        item.titleEl.style.width = '100%';
+        item.subtitleEl.style.width = '100%';
+        item.subtitleEl.style.height = 'auto';
+      }
+
+      // offsetHeight measures unscaled layout dimensions.
+      for (const item of items) {
+        item.baseHeight =
+          item.baseImageHeight +
+          item.titleEl.offsetHeight +
+          item.subtitleEl.offsetHeight +
+          2;
+      }
+    };
+
+    const gridSpacing = Math.max(
+      6,
+      Math.round(Math.min(width, height) / 40)
+    );
+
     const candidateKey = `${width}x${height}x${gridSpacing}`;
 
     if (this._ckey !== candidateKey) {
-      const candidates = [];
+      const candidates = [[0, 0]];
 
-      for (let dx = -width / 2; dx <= width / 2; dx += gridSpacing) {
-        for (let dy = -height / 2; dy <= height / 2; dy += gridSpacing) {
+      for (
+        let dx = -width / 2;
+        dx <= width / 2;
+        dx += gridSpacing
+      ) {
+        for (
+          let dy = -height / 2;
+          dy <= height / 2;
+          dy += gridSpacing
+        ) {
           candidates.push([dx, dy]);
         }
       }
 
       candidates.sort(
-        (a, b) => a[0] ** 2 + a[1] ** 2 - (b[0] ** 2 + b[1] ** 2)
+        (a, b) =>
+          a[0] ** 2 + a[1] ** 2 -
+          (b[0] ** 2 + b[1] ** 2)
       );
 
       this._cand = candidates;
       this._ckey = candidateKey;
     }
 
-    const place = (scale) => {
+    const place = (layoutScale) => {
       const placed = [];
+      const padding = 6 * layoutScale;
 
       for (const item of items) {
-        const imageWidth = item.span * scale;
-        const itemWidth = Math.max(imageWidth, minWidth);
-        const itemHeight = imageWidth * item.aspect + captionHeight;
+        const itemWidth = item.baseWidth * layoutScale;
+        const itemHeight = item.baseHeight * layoutScale;
 
-        if (itemWidth > width || itemHeight > height) return null;
+        if (itemWidth > width || itemHeight > height) {
+          return null;
+        }
 
         let hit = null;
 
@@ -2636,31 +2885,37 @@ _metarGroundWeather() {
           const x = width / 2 + dx - itemWidth / 2;
           const y = height / 2 + dy - itemHeight / 2;
 
-          if (x < 0 || y < 0 || x + itemWidth > width || y + itemHeight > height) {
+          if (
+            x < 0 || y < 0 ||
+            x + itemWidth > width ||
+            y + itemHeight > height
+          ) {
             continue;
           }
 
-          let fits = true;
+          const overlaps = placed.some((previous) =>
+            x < previous.x + previous.w + padding &&
+            x + itemWidth + padding > previous.x &&
+            y < previous.y + previous.h + padding &&
+            y + itemHeight + padding > previous.y
+          );
 
-          for (const previous of placed) {
-            if (
-              x < previous.x + previous.w + padding &&
-              x + itemWidth + padding > previous.x &&
-              y < previous.y + previous.h + padding &&
-              y + itemHeight + padding > previous.y
-            ) {
-              fits = false;
-              break;
-            }
-          }
+          if (!overlaps) {
+            hit = {
+              x,
+              y,
+              w: itemWidth,
+              h: itemHeight,
+              scale: layoutScale,
+              item,
+            };
 
-          if (fits) {
-            hit = { x, y, w: itemWidth, h: itemHeight, imageWidth, item };
             break;
           }
         }
 
         if (!hit) return null;
+
         placed.push(hit);
       }
 
@@ -2668,12 +2923,12 @@ _metarGroundWeather() {
     };
 
     let low = 0.05;
-    let high = width / items[0].span;
     let best = null;
 
-    for (const candidateMinWidth of [150, 120, 90, 60]) {
-      minWidth = candidateMinWidth;
+    for (const minimumWidth of [150, 120, 90, 60]) {
+      measureCards(minimumWidth);
       best = place(low);
+
       if (best) break;
     }
 
@@ -2681,13 +2936,28 @@ _metarGroundWeather() {
       this._content.classList.add('cluster-grid');
 
       for (const item of items) {
+        item.el.style.width = '';
+        item.el.style.height = '';
+        item.el.style.transform = '';
+        item.el.style.transition = '';
+
+        item.art.style.width = '';
+        item.art.style.height = '';
+        item.art.style.flex = '';
+
         item.placed = false;
       }
 
       return;
     }
 
-    this._content.classList.remove('cluster-grid');
+    // No card can exceed the scene's width or height.
+    let high = Math.min(
+      ...items.map((item) => Math.min(
+        width / item.baseWidth,
+        height / item.baseHeight
+      ))
+    );
 
     for (let iteration = 0; iteration < 10; iteration++) {
       const middle = (low + high) / 2;
@@ -2702,27 +2972,41 @@ _metarGroundWeather() {
     }
 
     const configuredScale = Number(this._cfg.cluster_scale);
-    const scale = Number.isFinite(configuredScale) ? configuredScale : DEFAULTS.cluster_scale;
-    const finalPlacement = place(low * Math.min(1, Math.max(0.2, scale))) || best;
 
-    for (const { x, y, w, h, imageWidth, item } of finalPlacement) {
-      item.art.style.width = `${imageWidth}px`;
+    const scale = Number.isFinite(configuredScale)
+      ? configuredScale
+      : DEFAULTS.cluster_scale;
 
-      if (!item.placed) {
-        item.el.style.transition = 'none';
-      }
+    const finalScale =
+      low * Math.min(1, Math.max(0.2, scale));
 
-      item.el.style.width = `${w}px`;
-      item.el.style.height = `${h}px`;
-      item.el.style.transform = `translate(${x}px,${y}px)`;
+    const finalPlacement = place(finalScale) || best;
 
-      if (!item.placed) {
-        void item.el.offsetWidth;
-        item.el.style.transition = '';
-        item.placed = true;
-      }
+    for (const placement of finalPlacement) {
+      const { item, x, y, scale: layoutScale } = placement;
+
+      /*
+      * Keep the measured base dimensions.
+      * Scale the entire card rather than resizing its contents.
+      */
+      item.el.style.width = `${item.baseWidth}px`;
+      item.el.style.height = `${item.baseHeight}px`;
+
+      item.el.style.transform =
+        `translate(${x}px, ${y}px) scale(${layoutScale})`;
+
+      item.placed = true;
+    }
+
+    // Commit final geometry before restoring transitions.
+    void this._content.offsetWidth;
+
+    for (const item of items) {
+      item.el.style.transition = '';
     }
   }
+
+
 }
 
 // ---------- Visual editor ----------
@@ -2743,8 +3027,10 @@ const OV_LABELS = {
   max_altitude_ft: 'Maximum altitude (ft; 0 = no ceiling)',
   show_ground: 'Include aircraft on the ground',
 
-  cluster_scale: 'Image scale for cluster view',
+  cluster_scale: 'Image scale for Cluster view',
+  cluster_text_size:'Cluster view base title font size (px; scales with aircraft)',  
   stack_scale: 'Image scale for stacked view',
+  stack_text_size: 'Stacked view base title font size (px)',
   size_curve: 'Relative size curve (1 = true scale, 0 = equal size). This keeps large aircraft from dwarfing smaller ones.',
   show_clock: 'Show clock',
   show_date: 'Show date',
@@ -2825,7 +3111,9 @@ const OV_SCHEMA = [
   { name: 'show_ground', selector: { boolean: {} } },
 
   { name: 'cluster_scale', type: 'float' },
+  num('cluster_text_size', 8, 48, 1),
   { name: 'stack_scale', type: 'float' },
+  num('stack_text_size', 8, 48, 1),
   { name: 'size_curve', type: 'float' },
   { name: 'show_clock', selector: { boolean: {} } },
   { name: 'show_date', selector: { boolean: {} } },
@@ -2889,7 +3177,7 @@ const OV_EDITOR_SECTIONS = [
     description:
       'Configure aircraft sizing, background, clock, and date. ',
     fields: [
-      'view', 'cluster_scale', 'stack_scale', 'size_curve', 'backdrop',
+      'view', 'cluster_scale', 'cluster_text_size','stack_scale',  'stack_text_size', 'size_curve', 'backdrop',
       'backdrop_image', 'sun_entity',  'show_clock', 'show_date',
     ],
   },
