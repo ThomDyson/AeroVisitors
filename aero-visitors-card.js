@@ -51,14 +51,14 @@
  *
   
     */
-const AEROVISITORS_CARD_VERSION = '1.1.0';
+const AEROVISITORS_CARD_VERSION = '1.2.0';
 const VIEWS = ['plate', 'cluster', 'stacked', 'metar'];
 
 //required under Datamask TOS
 const METAR_ATTRIBUTION =
   'Weather data from NOAA National Weather Service and Datamask Aviation.';
 
-const CLOUD_IMAGE_URL = '/local/aircraft/cloud.svg';
+const CLOUD_IMAGE_URL = './aircraft/cloud.svg';
 
 const CLOUD_DEFINITIONS = {
   FEW: {  percent: 20, label: 'Few clouds' },
@@ -173,17 +173,23 @@ const DEFAULTS = {
 
   cluster_scale: 0.92,
   cluster_text_size: 16,
+  size_curve_cluster: 1,  
   stack_scale: 0.92,
   stack_text_size: 16,  
-  size_curve: 0.5,
+  size_curve_stacked: 0.5,
   plate_pick: 'nearest',
+
+  show_title_cluster: true,
+  show_subtitle_cluster: true,
+  show_title_stacked: true,
+  show_subtitle_stacked: true,  
 
   backdrop: 'white',
   backdrop_image: '',
   sun_entity: 'sun.sun',
   weather_entity: '',
 
-  image_path: '/local/aircraft',
+  image_path: './aircraft',
   image_ext: 'png',
   image_fallback: 'default',
   image_faces: 'right',
@@ -1279,6 +1285,16 @@ class AeroVisitorsCard extends HTMLElement {
     });
   }
 
+  _showTitle(type) {
+    const key = `show_title_${type}`;
+    return this._cfg[key] ?? DEFAULTS[key] ?? true;
+  }
+
+  _showSubtitle(type) {
+    const key = `show_subtitle_${type}`;
+    return this._cfg[key] ?? DEFAULTS[key] ?? true;
+  }
+
   // ---------- Images ----------
 
   _probeImg(url) {
@@ -1345,12 +1361,12 @@ class AeroVisitorsCard extends HTMLElement {
       const hit = await tryName(a.t);
 
       if (hit) {
-        return hit;
+        return { ...hit, fallback: false };  // flag to say we did not fallback
       }
     }
     if (!config.image_fallback) return null;
-    const fallback = await tryName(config.image_fallback);
-    return fallback;
+      const fallback = await tryName(config.image_fallback);
+      return fallback ? { ...fallback, fallback: true } : null;
   }
 
   // ---------- Routes ----------
@@ -1551,12 +1567,13 @@ class AeroVisitorsCard extends HTMLElement {
       return configured;
     }
 
-    return WINGSPAN_M[a.t] || CATEGORY_SPAN_M[a.cat] || 30;
+    return WINGSPAN_M[a.t] || CATEGORY_SPAN_M[a.cat] || 15;
   }
 
-  _sizeCurve() {
-    const value = Number(this._cfg.size_curve);
-    return Number.isFinite(value) ? value : DEFAULTS.size_curve;
+  _sizeCurve(type) {
+    const key = `size_curve_${type}`;
+    const value = Number(this._cfg[key] ?? DEFAULTS[key] ?? 1);
+    return Number.isFinite(value) ? value : 1;
   }
 
   _operator(a) {
@@ -1616,12 +1633,14 @@ class AeroVisitorsCard extends HTMLElement {
     const match = /^[A-Z]{3}0*(\d+[A-Z]?)$/.exec(a.flight);
     const base = match ? `Flight ${match[1]}` : a.flight;
     const operator = this._operator(a);
-    const label = operator ? `${operator} ${base}` : base;
+    // if there is no operator, add the aircraft type
+    const label = operator
+      ? `${operator} ${base}`
+      : a.r?.trim() ? `${base} (${a.r.trim()})` : base;
 
     if (!includeRoute) return label;
 
     const stops = a.route?.stops;
-
     if (!Array.isArray(stops) || stops.length < 2) {
       return label;
     }
@@ -1705,6 +1724,7 @@ class AeroVisitorsCard extends HTMLElement {
   _createAircraftItem() {
     const el = document.createElement('div');
     el.className = 'aircraft';
+    const currentView = this._cfg.view;
 
     const titleEl = document.createElement('div');
     titleEl.className = 'aircraft-title';
@@ -1712,10 +1732,15 @@ class AeroVisitorsCard extends HTMLElement {
     const subtitleEl = document.createElement('div');
     subtitleEl.className = 'aircraft-subtitle';
 
+    if (currentView === 'cluster' || currentView === 'stacked') {
+      titleEl.style.display = this._showTitle(currentView) ? '' : 'none';
+      subtitleEl.style.display = this._showSubtitle(currentView) ? '' : 'none';
+      }   
+
     let artHost = el;
     let infoEl = null;
 
-    if (this._cfg.view === 'plate') {
+    if (currentView === 'plate') {
       artHost = document.createElement('div');
       artHost.className = 'plane';
 
@@ -1780,7 +1805,9 @@ class AeroVisitorsCard extends HTMLElement {
     item.art.classList.toggle('alert-art', Boolean(this._alertText(a)));
 
     const isMetar = this._cfg.view === 'metar';
-    item.titleEl.textContent = this._flightLabel(a, { includeRoute: !isMetar });
+    item.titleEl.textContent = a.img?.fallback && a.r
+      ? `${a.r} (${a.t || 'Unknown type'})`
+      : this._flightLabel(a, { includeRoute: !isMetar });
     item.subtitleEl.textContent = this._subTitle(a, { includeNavigation: !isMetar });
 
     if (this._cfg.view === 'stacked') {
@@ -2058,7 +2085,7 @@ _metarGroundWeather() {
     for (const a of this._targets) {
       const item = this._getAircraftItem(a);
 
-      item.span = Math.pow(this._getWingSpan(a), this._sizeCurve());
+      item.span = Math.pow(this._getWingSpan(a), this._sizeCurve("cluster"));
       item.aspect = a.img ? a.img.h / a.img.w : 0.4;
     }
 
@@ -2202,7 +2229,7 @@ _metarGroundWeather() {
       ? Math.min(1, Math.max(0.2, configuredScale))
       : DEFAULTS.stack_scale;
 
-    const sizeCurve = this._sizeCurve();
+    const sizeCurve = this._sizeCurve("stacked");
 
     // Normalize wingspan sizing against the largest visible target.
     const largestSize = Math.max(
@@ -2763,7 +2790,7 @@ _metarGroundWeather() {
     const fontRatio = baseFontSize / 16;
 
     // At 100% scale, a 30-meter aircraft is 240px wide.
-    const referenceSpan = Math.pow(30, this._sizeCurve());
+    const referenceSpan = Math.pow(30, this._sizeCurve("cluster"));
     const referenceImageWidth = 240;
 
     /*
@@ -3028,12 +3055,18 @@ const OV_LABELS = {
   show_ground: 'Include aircraft on the ground',
 
   cluster_scale: 'Image scale for Cluster view',
-  cluster_text_size:'Cluster view base title font size (px; scales with aircraft)',  
+  cluster_text_size:'Cluster view base title font size (px; scales with aircraft)', 
+  size_curve_cluster: 'Relative size curve (2.5 is approx true scale, 1 = some variation, 0 = equal size) in Cluster view.', 
   stack_scale: 'Image scale for stacked view',
   stack_text_size: 'Stacked view base title font size (px)',
-  size_curve: 'Relative size curve (1 = true scale, 0 = equal size). This keeps large aircraft from dwarfing smaller ones.',
+  size_curve_stacked: 'Relative size curve (2.5 is approx true scale, 1 = some variation, 0 = equal size) in Stacked view. ',
   show_clock: 'Show clock',
   show_date: 'Show date',
+
+  show_title_cluster: 'Show Title in Cluster View',
+  show_subtitle_cluster: 'Show Sub titl in Cluster View',
+  show_title_stacked: 'Show Title in Stacked View',
+  show_subtitle_stacked: 'Show Sub title in Stacked View',
 
   backdrop: 'Backdrop',
   backdrop_image: 'Backdrop image URL',
@@ -3052,7 +3085,7 @@ const OV_LABELS = {
   route_url: 'Route lookup API base URL',
   climb_fpm: 'Climb/descent threshold (ft/min)',
   operators: 'Operator name overrides (three-character callsign prefix: name)',
-  wingspans: 'Wingspan overrides (ICAO aircraft type: meters). Used for scaling images. Wingspan lookups are stored for many aircraft. If no wingspan is available for a type, the ADSB category (large, small, helo), is used for an estimate. Set a wingspan by aircraft type. E.g C68A : 22 here.',
+  wingspans: 'Wingspan overrides (ICAO aircraft type: meters). Used for scaling images. Wingspan lookups are stored for many aircraft. If no wingspan is available for a type, the ADSB category (large, small, helo), is used for an estimate. Set a wingspan by aircraft type here. e.g C68A : 22.',
 
   metar_enabled: 'Pull airport weather data from Datamask.org',
   metar_airport: 'METAR airport ICAO code',
@@ -3112,11 +3145,16 @@ const OV_SCHEMA = [
 
   { name: 'cluster_scale', type: 'float' },
   num('cluster_text_size', 8, 48, 1),
+  { name: 'size_curve_cluster', type: 'float' },  
   { name: 'stack_scale', type: 'float' },
   num('stack_text_size', 8, 48, 1),
-  { name: 'size_curve', type: 'float' },
+  { name: 'size_curve_stacked', type: 'float' },
   { name: 'show_clock', selector: { boolean: {} } },
   { name: 'show_date', selector: { boolean: {} } },
+  { name: 'show_title_cluster',  selector: { boolean: {} }, },
+  { name: 'show_subtitle_cluster',  selector: { boolean: {} }, },
+  { name: 'show_title_stacked', selector: { boolean: {} }, },
+  { name: 'show_subtitle_stacked', selector: { boolean: {} }, },
 
   sel('backdrop', [
     'white', 'auto', 'none', 'clear', 'clouds', 'rainy',
@@ -3175,10 +3213,10 @@ const OV_EDITOR_SECTIONS = [
   { id: 'appearance',
     label: 'Appearance',
     description:
-      'Configure aircraft sizing, background, clock, and date. ',
+      'Configure aircraft sizing, background, clock, and date. Relative size curves are an exponent function keeps large aircraft from dwarfing smaller ones. ',
     fields: [
-      'view', 'cluster_scale', 'cluster_text_size','stack_scale',  'stack_text_size', 'size_curve', 'backdrop',
-      'backdrop_image', 'sun_entity',  'show_clock', 'show_date',
+      'view', 'cluster_scale', 'size_curve_cluster','cluster_text_size','stack_scale', 'size_curve_stacked', 'stack_text_size',  'backdrop',
+      'backdrop_image', 'sun_entity', 'show_title_cluster','show_subtitle_cluster','show_title_stacked','show_subtitle_stacked', 'show_clock', 'show_date',
     ],
   },
   { id: 'artwork',
