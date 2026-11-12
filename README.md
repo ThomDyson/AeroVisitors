@@ -7,7 +7,7 @@ This card can use either a direct feed from an ADSB source, or a Home Assistant 
  1. Copy the card to /config/www/aero-visitors-card.js
  2. Add /local/aero-visitors-card.js as a JavaScript module resource
  3. Put aircraft images in /config/www/aircraft/ with the cloud.svg
- 4. Aircraft should be 1500x100 roughly.  PNG with transparent background is best
+ 4. Aircraft should be 1200 x 650 roughly. There is so much resizing that hi-rez isn't needed. PNG with transparent background is best
  
  Images are named by ICAO aircraft type:
    A320.png, B738.png, C172.png
