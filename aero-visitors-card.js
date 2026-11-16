@@ -51,7 +51,7 @@
  *
   
     */
-const AEROVISITORS_CARD_VERSION = '1.2.0';
+const AEROVISITORS_CARD_VERSION = '1.3.0';
 const VIEWS = ['plate', 'cluster', 'stacked', 'metar'];
 
 //required under Datamask TOS
@@ -198,7 +198,7 @@ const DEFAULTS = {
 
   show_info: true,
   route_lookup: true,
-  route_url: 'https://adsb.im/api/0/route',
+  route_url: 'http://adsb.im/api/0/routeset',
   climb_fpm: 200,
 
   empty_text: 'Nothing but Clear Skies',
@@ -209,6 +209,19 @@ const DEFAULTS = {
   wingspans: {},
   operators: {},
 };
+
+// need to remove leading zeroes in call signs
+function normalizeCallsign(callsign) {
+  const text = String(callsign ?? '').trim().toUpperCase();
+  const match = /^([A-Z]{3})(\d+)([A-Z]*)$/.exec(text);
+
+  if (!match) return text;
+
+  // Remove leading zeros, keeping one digit if all digits are zero.
+  const number = match[2].replace(/^0+(?=\d)/, '');
+
+  return `${match[1]}${number}${match[3]}`;
+}
 
 function geoDistance(lat1, lon1, lat2, lon2) {
   const rad = Math.PI / 180;
@@ -430,6 +443,9 @@ class AeroVisitorsCard extends HTMLElement {
     this._imgCache = new Map();
     this._routes = new Map();
     this._routePending = new Map();
+    this._routeTimer = null;
+    this._activeRouteBatch = null;
+    this._routeLastPost = 0;
 
     this._fails = 0;
     this._error = null;
@@ -571,7 +587,7 @@ class AeroVisitorsCard extends HTMLElement {
       }
       const refresh = Number(updatedConfig.metar_refresh);
       if (!Number.isInteger(refresh) || refresh < 30 || refresh > 1440) {
-        throw new Error('METAR: Refresh interval must be an integer between 30 and 1440 minutes');
+        throw new Error('METAR: Refresh interval must be an integer between 30 and 1440 (minutes)');
       }
       updatedConfig.metar_refresh = refresh;
     }
@@ -732,6 +748,17 @@ class AeroVisitorsCard extends HTMLElement {
       if (!document.hidden) this._poll();
     }, refreshMs);
 
+      if (this._cfg.route_lookup && this._routeTimer === null) {
+        this._routeTimer = setTimeout(() => {
+          // Send the first batch after 5 seconds.
+          void this._processRouteQueue();
+
+          // Then send queued batches every 35 seconds.
+          this._routeTimer = setInterval(() => {
+            void this._processRouteQueue();
+          }, 35000);
+        }, 5000);
+      }
     this._poll();
     this._scheduleMetar();
   }
@@ -751,6 +778,16 @@ class AeroVisitorsCard extends HTMLElement {
 
     this._activePoll = null;
     this._activeMetar = null;
+    clearTimeout(this._routeTimer);
+    clearInterval(this._routeTimer);
+    this._routeTimer = null;
+    this._activeRouteBatch = null;
+
+    // Settle waiting promises so stopped lookups do not hang.
+    for (const entry of this._routePending.values()) {
+      entry.resolve(null);
+    }
+
     this._routePending.clear();
 
     if (this._renderFrame !== null) {
@@ -761,7 +798,15 @@ class AeroVisitorsCard extends HTMLElement {
 
   // ---------- Requests ----------
 
-  async _fetchJson(url, { signal, timeoutMs = 8000, cache = 'no-store' } = {}) {
+  async _fetchJson(
+    url,
+    {
+      signal,
+      timeoutMs = 8000,
+      cache = 'no-store',
+      ...requestOptions
+    } = {}
+  ) {
     const ctl = new AbortController();
     let timedOut = false;
     const abort = () => ctl.abort();
@@ -778,7 +823,11 @@ class AeroVisitorsCard extends HTMLElement {
     }, timeoutMs);
 
     try {
-      const response = await fetch(url, { cache, signal: ctl.signal });
+      const response = await fetch(url, {
+        ...requestOptions,
+        cache,
+        signal: ctl.signal,
+      });
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status} from ${url}`);
@@ -787,7 +836,9 @@ class AeroVisitorsCard extends HTMLElement {
       return await response.json();
     } catch (error) {
       if (timedOut && !signal?.aborted) {
-        throw new Error(`Request timed out after ${timeoutMs / 1000}s: ${url}`);
+        throw new Error(
+          `Request timed out after ${timeoutMs / 1000}s: ${url}`
+        );
       }
 
       throw error;
@@ -1212,7 +1263,9 @@ class AeroVisitorsCard extends HTMLElement {
 
       results.push({
         hex,
-        flight: String(a.flight || '').trim(),
+        lat: a.lat,
+        lon: a.lon,        
+        flight: normalizeCallsign(a.flight),
         r: a.r ? String(a.r).trim().toUpperCase() : '',
         t: a.t ? String(a.t).trim().toUpperCase() : '',
         desc: String(a.desc || ''),
@@ -1369,54 +1422,229 @@ class AeroVisitorsCard extends HTMLElement {
       return fallback ? { ...fallback, fallback: true } : null;
   }
 
-  // ---------- Routes ----------
 
-    // clear any route cache older than 30 minutes to avoid memory bloat
-    _pruneRouteCache() {
-    const cutoff = Date.now() - 30 * 60 * 1000;
+// ---------- Routes ----------
 
-    for (const [url, entry] of this._routes) {
-      if (entry.t <= cutoff) {
-        this._routes.delete(url);
-      }
+// Remove route cache entries older than 30 minutes.
+_pruneRouteCache() {
+  const cutoff = Date.now() - 30 * 60 * 1000;
+
+  for (const [key, entry] of this._routes) {
+    if (entry.t <= cutoff) {
+      this._routes.delete(key);
     }
   }
+}
 
-  async _getRoute(a, config = this._cfg, signal = this._lifecycleCtl?.signal) {
-    if (signal?.aborted || !config.route_lookup || !/^[A-Z]{3}\d/.test(a.flight)) {
-      return null;
+// Queue a lookup. Multiple requests for the same callsign share
+// one promise and produce only one entry in the POST payload.
+async _getRoute(
+  a,
+  config = this._cfg,
+  signal = this._lifecycleCtl?.signal
+) {
+  const callsign = normalizeCallsign(a.flight);
+
+  if (
+    signal?.aborted ||
+    !config.route_lookup ||
+    !/^[A-Z]{3}\d/.test(callsign) ||
+    !Number.isFinite(a.lat) ||
+    !Number.isFinite(a.lon)
+  ) {
+    return null;
+  }
+
+  const endpoint = String(config.route_url || '')
+    .trim()
+    .replace(/\/+$/, '');
+
+  if (!endpoint) return null;
+
+  const key = `${endpoint}|${callsign}`;
+  const ttlMs = 30 * 60 * 1000;
+  const cached = this._routes.get(key);
+
+  if (cached && Date.now() - cached.t < ttlMs) {
+    return cached.val;
+  }
+
+  const pending = this._routePending.get(key);
+
+  if (pending) {
+    // Use the newest coordinates available before sending.
+    if (!pending.sent) {
+      pending.plane = {
+        callsign,
+        lat: a.lat,
+        lng: a.lon,
+      };
     }
 
-    const base = String(config.route_url || '').replace(/\/+$/, '');
-    const url = `${base}/${encodeURIComponent(a.flight)}`;
-    const ttlMs = 30 * 60 * 1000;
-    const cachedRoute = this._routes.get(url);
+    return pending.promise;
+  }
 
-    if (cachedRoute && Date.now() - cachedRoute.t < ttlMs) {
-      return cachedRoute.val;
+  let resolve;
+  const promise = new Promise((done) => {
+    resolve = done;
+  });
+
+  this._routePending.set(key, {
+    key,
+    endpoint,
+    callsign,
+    plane: {
+      callsign,
+      lat: a.lat,
+      lng: a.lon,
+    },
+    sent: false,
+    promise,
+    resolve,
+  });
+
+  return promise;
+}
+
+  // Called every 35 seconds. All unsent lookups are sent together.
+  async _processRouteQueue() {
+    const signal = this._lifecycleCtl?.signal;  // get a handle so we can stop this process
+
+    //check all the reasons we might not want to check for routes
+    if (
+      !this.isConnected ||
+      !this._cfg?.route_lookup ||
+      !signal ||
+      signal.aborted ||
+      this._activeRouteBatch
+    ) {
+      return;
     }
 
-    const pending = this._routePending.get(url);
-    if (pending) return pending;
+    // Preserve the minimum interval even if the card lifecycle restarts.
+    if (Date.now() - this._routeLastPost < 35000) {
+      return;
+    }
+    //clean up the configured endpoint URL
+    const endpoint = String(this._cfg.route_url || '')
+      .trim()
+      .replace(/\/+$/, '');
 
-    const request = (async () => {
-      let value = null;
+    //get the list of pending routes with a little validation
+    const pendingRoutes = [...this._routePending.values()].filter(
+      (entry) => !entry.sent && entry.endpoint === endpoint
+    );
 
-      try {
-        const json = await this._fetchJson(url, { signal, timeoutMs: 20000 });
-        const airports = json?._airports;
+    if (!pendingRoutes.length) return;
 
-        const airportLabel = (airport) => {
-          for (const field of ['location', 'iata', 'icao']) {
-            const text = airport?.[field];
+    const generation = this._generation;
+    const batch = {};
+    const routeResults = new Map();
+    let succeeded = false;
 
-            if (typeof text === 'string' && text.trim()) {
-              return text.trim();
-            }
+    this._activeRouteBatch = batch;
+
+    //flag each route as sent (really in progress)
+    for (const entry of pendingRoutes) {
+      entry.sent = true;
+    }
+
+    //mkae sure we dont have a stale set of request from things like switching views
+    const isCurrent = () =>
+      generation === this._generation &&
+      !signal.aborted &&
+      this.isConnected;
+
+    try {
+      const url = new URL(endpoint, window.location.href);
+
+      if (
+        window.location.protocol === 'https:' &&
+        url.protocol === 'http:'
+      ) {
+        throw new Error(
+          'Route lookup blocked: this dashboard is HTTPS but ' +
+          'route_url is HTTP. Use an HTTPS endpoint or proxy.'
+        );
+      }
+
+      this._routeLastPost = Date.now();
+     
+      //send the request with all the pending routes
+      const json = await this._fetchJson(url.href, {
+        signal,
+        timeoutMs: 20000,
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          planes: pendingRoutes.map((entry) => entry.plane),
+        }),
+      });
+
+      if (!isCurrent()) return;
+
+      if (!Array.isArray(json)) {
+        throw new Error('Route response must be an array');
+      }
+
+      // for each stop return the city, fallback to iata value, then icao if needed.
+      const airportLabel = (airport) => {
+        for (const field of ['location', 'iata', 'icao']) {
+          const text = airport?.[field];
+
+          if (typeof text === 'string' && text.trim()) {
+            return text.trim();
           }
+        }
 
-          return '';
-        };
+        return '';
+      };
+      /*
+      * Example routeset response:
+      * Showing two-city and three-city results.
+      * Any likely, additional airport metadata is ignored.
+      *
+      * [
+      *   {
+      *     "callsign": "DAL203",
+      *     "plausible": true,
+      *     "_airports": [
+      *       { "location": "Athens", "iata": "ATH", "icao": "LGAV" },
+      *       { "location": "New York", "iata": "JFK", "icao": "KJFK" }
+      *     ]
+      *   },
+      *   {
+      *     "callsign": "AAL123",
+      *     "plausible": true,
+      *     "_airports": [
+      *       { "location": "Boston", "iata": "BOS", "icao": "KBOS" },
+      *       { "location": "Chicago", "iata": "ORD", "icao": "KORD" },
+      *       { "location": "Los Angeles", "iata": "LAX", "icao": "KLAX" }
+      *     ]
+      *   }
+      * ]
+      *
+      * Parsed route values:
+      *   DAL203: { stops: ["Athens", "New York"] }
+      *   AAL123: { stops: ["Boston", "Chicago", "Los Angeles"] }
+      *
+      * Displayed labels:
+      *   Delta Flight 203 from Athens to New York
+      *   American Flight 123 · Boston → Chicago → Los Angeles
+      */
+      // Match by callsign, not array position.
+      for (const route of json) {
+        const callsign = String(route?.callsign || '')
+          .trim()
+          .toUpperCase();
+
+        if (!callsign) continue;
+
+        let value = null;
+        const airports = route?._airports;
 
         if (Array.isArray(airports) && airports.length >= 2) {
           const stops = airports.map(airportLabel);
@@ -1425,28 +1653,47 @@ class AeroVisitorsCard extends HTMLElement {
             value = { stops };
           }
         }
-      } catch (error) {
-        if (!signal?.aborted) {
-          console.warn(
-            '[AeroVisitors] Route lookup failed:',
-            a.flight,
-            error instanceof Error ? error.message : String(error)
-          );
-        }
+
+        routeResults.set(callsign, value);
       }
 
-      if (signal?.aborted) return null;
-      this._routes.set(url, { t: Date.now(), val: value });
-      return value;
-    })();
-
-    this._routePending.set(url, request);
-
-    try {
-      return await request;
+      succeeded = true;
+    } catch (error) {
+      if (isCurrent()) {
+        console.warn(
+          '[AeroVisitors] Route batch lookup failed:',
+          error instanceof Error ? error.message : String(error)
+        );
+      }
     } finally {
-      if (this._routePending.get(url) === request) {
-        this._routePending.delete(url);
+      const current = isCurrent();
+
+      for (const entry of pendingRoutes) {
+        // One more check to be sure we are in sync.
+        if (this._routePending.get(entry.key) !== entry) {
+          continue;
+        }
+        //if results come back as null, that's what we use. no retry on valid null responses
+        // might change this in the future to allow 2 retries.
+        const value = current && succeeded
+          ? routeResults.get(entry.callsign) ?? null
+          : null;
+
+        // Cache successful responses, including missing routes.
+        // Network failures are not cached, allowing a later retry.
+        if (current && succeeded) {
+          this._routes.set(entry.key, {
+            t: Date.now(),
+            val: value,
+          });
+        }
+        //clean up and clear promises
+        this._routePending.delete(entry.key);
+        entry.resolve(value);
+      }
+
+      if (this._activeRouteBatch === batch) {
+        this._activeRouteBatch = null;
       }
     }
   }
@@ -3082,7 +3329,7 @@ const OV_LABELS = {
 
   show_info: 'Show aircraft information (plate)',
   route_lookup: 'Look up origin/destination cities',
-  route_url: 'Route lookup API base URL',
+  route_url: 'Route lookup API base URL. Routes are looked up in batches, every 35 seconds.', 
   climb_fpm: 'Climb/descent threshold (ft/min)',
   operators: 'Operator name overrides (three-character callsign prefix: name)',
   wingspans: 'Wingspan overrides (ICAO aircraft type: meters). Used for scaling images. Wingspan lookups are stored for many aircraft. If no wingspan is available for a type, the ADSB category (large, small, helo), is used for an estimate. Set a wingspan by aircraft type here. e.g C68A : 22.',
