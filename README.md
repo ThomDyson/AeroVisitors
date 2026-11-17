@@ -62,27 +62,40 @@ These can all be edited in the visual editor.
 ```
 type: custom:aero-visitors-card
 adsb_source: url                                        # ADS-B data source: URL or sensor
-adsb_url: http://192.168.0.101:8080/data/aircraft.json  # ADS-B URL; supports {lat}, {lon}, {radius_nm}, {radius_km}, {radius_mi} for feeds that accept 
+adsb_url: http://192.168.0.101:8080/data/aircraft.json  # ADS-B URL; supports {lat}, {lon}, {radius_nm},
+                                                          {radius_km}, {radius_mi} for feeds that accept 
                                                           those parameters in the URL base
-adsb_sensor: sensor.adsb_feed                           # ADS-B sensor with an aircraft or ac array in its attributes; used when 'adsb_source' is sensor. 
+adsb_sensor: sensor.adsb_feed                           # ADS-B sensor with an aircraft or ac array in 
+                                                          its attributes; used when 'adsb_source' is sensor. 
                                                           See example config above
-latitude: 40                                            # Latitude; omit to use Home Assistant home location. Used when limiting the radius 
+latitude: 40                                            # Latitude; omit to use Home Assistant home 
+                                                          location. Used when limiting the radius 
                                                           or as a parameter of the ADSB URL.
 longitude: -70                                          # Longitude; omit to use Home Assistant home location. 
-units: imperial                                         # Distance units: auto, imperial, or metric. Used when limiting the radius.
-radius: 300                                             # Limit aircraft to this radius from the configured location, in mi/km, following selected units
+units: imperial                                         # Distance units: auto, imperial, or metric. 
+                                                         Used when limiting the radius.
+radius: 300                                             # Limit aircraft to this radius from the configured
+                                                          location, in mi/km, following selected units
 refresh_s: 300                                          # Refresh interval in seconds. 
 
 view: cluster                                           # Default view: plate, cluster, stacked, or metar
-plate_pick: nearest                                     # Plate view shows one aircraft. This determines which one: nearest, lowest, highest, or fastest
+plate_pick: nearest                                     # Plate view shows one aircraft. This determines 
+                                                         which one: nearest, lowest, highest, or fastest
 max_aircraft: 15                                        # Maximum aircraft in Cluster, Stacked, and METAR views
 max_altitude_ft: 0                                      # Maximum altitude in feet; 0 = no ceiling
 show_ground: false                                      # Include aircraft on the ground
 
 cluster_scale: 1                                        # Image scale for Cluster view. 
-cluster_text_size: 8                                    # Cluster view base title font size in pixels; scales with aircraft.
-size_curve_cluster: 1                                   # Cluster relative size curve: 2.5 ≈ true scale, 1 = some variation, 0 = equal size. 
-                                                          Aircraft sizes are based on wingspan. The card hold over 100 common aircraft types. For any aircraft not available, a wingspan is assigned based on ADBS category (e.g. light, small, heavy, rotoctraft ). Aircraft can then be scaled to true proportions, all the same size, or something in between. The scale is logarithmic.
+cluster_text_size: 8                                    # Cluster view base title font size in pixels; 
+                                                          scales with aircraft.
+size_curve_cluster: 1                                   # Cluster relative size curve: 
+                                                          2.5 ≈ true scale, 1 = some variation, 0 = equal size. 
+                                                          Aircraft sizes are based on wingspan. The card hold 
+                                                          over 100 common aircraft types. For any aircraft 
+                                                          not available, a wingspan is assigned based on ADSB
+                                                          category (e.g. light, small, heavy, rotocraft ). 
+                                                          Aircraft can then be scaled to true proportions, 
+                                                          all the same size, or something in between. The scale is logarithmic.
 stack_scale: 1                                          # Image scale for Stacked view
 stack_text_size: 12                                     # Stacked view base title font size in pixels
 size_curve_stacked: 1                                   # Stacked relative size curve: 2.5 ≈ true scale, 1 = some variation, 0 = equal size
@@ -96,15 +109,18 @@ show_subtitle_stacked: true                             # Show subtitle in Stack
 
 backdrop: none                                          # Backdrop: 
                                                           white - simple white
-                                                          auto - If the weather sensor is configured, current conditions (clear, clouds, rainy, snowy,
-                                                                 stormy) are applied. If the sun sensor is configured, sunrise and sunset are applied.
+                                                          auto - If the weather sensor is configured, 
+                                                                 current conditions (clear, clouds, rainy, snowy,
+                                                                 stormy) are applied. If the sun sensor is 
+                                                                 configured, sunrise and sunset are applied.
                                                                  Day and night are applied.
                                                           none - grey slightly textured background
                                                           sunset - gradient fill from blue down to orange
                                                           night - dark sky, stars, the moon (phase not included)
                                                           plate - border page with a manila colored background
                                                           image - An image based on configuration below
-backdrop_image: /local/smiley_face.jpg                # Backdrop image URL; used when backdrop is 'image' Should be stored on the HA server.
+backdrop_image: /local/smiley_face.jpg                  # Backdrop image URL; used when backdrop is 'image' 
+                                                          Should be stored on the HA server.
 sun_entity: sun.sun                                     # Sun entity for automatic backdrop
 weather_entity: weather.XXXXXX                          # Optional weather entity for automatic backdrop
 
@@ -113,26 +129,38 @@ image_ext: png                                          # Aircraft image extensi
 image_fallback: default                                 # Fallback image name without extension; blank = silhouette
 image_faces: left                                       # Artwork base direction: left or right. 
 flip_to_heading: true                                   # Flip artwork to match heading: west left, east right
-image_blend: normal                                     # Image blend mode: normal or multiply. This is mostly for aircraft images in jpg that have a 
+image_blend: normal                                     # Image blend mode: normal or multiply. This is mostly 
+                                                          for aircraft images in jpg that have a 
                                                           white background. PNG should have a transparent background
 
 show_info: true                                         # Show aircraft information in Plate view
-route_lookup: true                                      # Look up origin/destination cities for aircraft with a flight number.
-route_url: http://adsb.im/api/0/routeset                # Route lookup API endpoint; requests are batched every 35 seconds
-climb_fpm: 200                                          # Climb/descent threshold in feet per minute. Aircraft are labeled as climbing/descending if their 
+route_lookup: true                                      # Look up origin/destination cities for aircraft 
+                                                          with a flight number.
+route_url: http://adsb.im/api/0/routeset                # Route lookup API endpoint; requests are batched
+                                                          every 35 seconds
+climb_fpm: 200                                          # Climb/descent threshold in feet per minute. Aircraft
+                                                          are labeled as climbing/descending if their 
                                                           rate of change is greater than this.
-operators:                                              # Aircraft operators use a 3 character prefix for flight numbers, e.g. AAL American Airlines,
-                                                          BAW British Airways, etc. More than 100 common (in North America) codes are configured. 
-                                                          Add entries here to show missing ones like  EJM: Exective Jet Mgmt  One pair per line.
-wingspans:                                              # Wingspan overrides in meters. For aircraft that are sized incorrectly, 
-                                                          this allows you to override incorrect or missing winspance. e.g. C68A: 22  One entry per line
+operators:                                              # Aircraft operators use a 3 character prefix for
+                                                          flight numbers, e.g. AAL American Airlines,
+                                                          BAW British Airways, etc. More than 100 common
+                                                          (in North America) codes are configured. 
+                                                          Add entries here to show missing ones like  
+                                                          EJM: Exective Jet Mgmt  One pair per line.
+wingspans:                                              # Wingspan overrides in meters. For aircraft that 
+                                                          are sized incorrectly, 
+                                                          this allows you to override incorrect or missing
+                                                          wingspan e.g. C68A: 22  One entry per line
 
 metar_enabled: true                                     # Pull airport weather (METAR) data from Datamask.org
 metar_airport: KBOS                                     # METAR airport ICAO code. Always a 4 character value
-metar_airport_elevation_ft: 5                           # Airport elevation in feet above mean sea level. METAR reports in atltitude above ground, 
-                                                          aircraft report in altitude above sea level. This provides a conversion.
+metar_airport_elevation_ft: 5                           # Airport elevation in feet above mean sea level. 
+                                                          METAR reports in atltitude above ground, 
+                                                          aircraft report in altitude above sea level. 
+                                                          This provides a conversion.
 metar_refresh: 30                                       # METAR refresh interval in minutes; 30–1440
-show_clouds_stacked: true                               # Show METAR cloud layers in Stacked view; Required that METAR data is
+show_clouds_stacked: true                               # Show METAR cloud layers in Stacked view; 
+                                                          Required that METAR data is
 
 empty_text: Nothing but Clear Skies                     # Text displayed when no aircraft are overhead
 hide_when_empty: false                                  # Hide card when empty
