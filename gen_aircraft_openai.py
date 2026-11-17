@@ -11,7 +11,7 @@ from io import BytesIO
 # ---------- Configuration ----------
 ## Your OpenAI API key should be set in the environment variable OPENAI_API_KEY.
 
-MODEL = "gpt-image-2.5-sunburst"
+MODEL = "gpt-image-2.5-flare"
 INPUT_CSV = Path("aircraft_redo.csv")
 OUTPUT_DIR = Path("aircraft_images")
 OUTPUT_DIR.mkdir(exist_ok=True)
@@ -37,7 +37,6 @@ Aircraft accuracy:
 - Ensure the livery is applied realistically, following the contours of the aircraft.
 - Output on a genuinely transparent background, not a checkerboard pattern, white background or colored backdrop.
 - Maintain a true left-facing side elevation. Far-side engines, wheels, wings, and tail surfaces may be naturally hidden or overlap near-side components. Do not move, duplicate, or add components merely to make their total count visible. 
-- Fixed landing gear must remain extended in flight. 
 - Retractable landing gear must be fully retracted.
 
 Paint scheme: 
